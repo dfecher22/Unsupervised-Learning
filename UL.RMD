@@ -1,0 +1,826 @@
+```{r}
+#read in heart data and tinker with some of the data types
+
+setwd("C:/Users/Dan/Downloads/MLsets")
+library(randomForest)
+library(plyr)
+library(caret)
+
+a=read.csv("heart.csv")
+
+
+indx = sapply(a, is.factor)
+a[indx] <- lapply(a[indx], function(x) as.numeric((x)))
+
+
+
+b=subset(a,select=-c(target))
+
+
+
+a$target=as.factor(a$target)
+
+numb=a
+numb$target=as.numeric(numb$target)
+
+all1=subset(numb,target==2)
+all0=subset(numb,target==1)
+
+negsamp=sample(seq_len(nrow(all0)), size = 0.3*nrow(all0))
+neg=all0[negsamp,]
+
+upreg=rbind(neg,all1)
+
+
+
+```
+
+```{r}
+#read in Bank data and change to numeric matrices
+
+setwd("C:/Users/Dan/Downloads/MLsets")
+library(randomForest)
+library(plyr)
+library(caret)
+
+bankfull=read.csv("fixed_banks.csv")
+
+colnames(bankfull)[21]="target"
+
+indx = sapply(bankfull, is.factor)
+bankfull[indx] <- lapply(bankfull[indx], function(x) as.numeric((x)))
+
+bankstripped=subset(bankfull,select=-c(target))
+
+
+
+bankfull$target=as.factor(bankfull$target)
+
+all1=subset(bankfull,target=="yes")
+all0=subset(bankfull,target=="no")
+
+negsamp=sample(seq_len(nrow(all0)), size = 0.3*nrow(all0))
+neg=all0[negsamp,]
+
+upreg=rbind(neg,all1)
+
+
+```
+
+```{r}
+#use PCA to reduce dimensions
+
+
+library(devtools)
+#install_github("vqv/ggbiplot")
+library(ggbiplot)
+
+
+pca=prcomp(b)
+summary(pca)
+
+pca_keep_heart=pca$x[,1:3]
+```
+```{r}
+
+#use PCA to reduce dimensions, keep only best components
+
+library(devtools)
+#install_github("vqv/ggbiplot")
+library(ggbiplot)
+
+
+
+pca=prcomp(bankstripped)
+summary(pca)
+
+#keep only first 2 principal components
+
+pca_keep_bank=pca$x[,1:2]
+```
+
+
+```{r}
+#kmeans heart section
+
+library(factoextra)
+
+mod=kmeans(b,2,nstart=4)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==a$target
+
+plot = fviz_cluster(mod, geom = "point", data = b) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+```
+
+```{r}
+#kmeans bank section
+
+library(factoextra)
+
+mod=kmeans(bankstripped,2,nstart=4)
+banklabs=-1*mod$cluster+3
+matches=banklabs==bankfull$target
+
+plot = fviz_cluster(mod, geom = "point", data = bankstripped) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+
+
+```
+
+
+
+
+```{r}
+#EM section for heart data
+
+library(EMCluster)
+
+emobj <- simple.init(a, nclass = 2)
+
+mod=emcluster(a,emobj,assign.class =FALSE)
+
+q=assign.class(a,mod)
+heartclust=q$class
+
+matches=heartclust==a$target
+mean(matches)
+
+heartclust_em=heartclust
+
+
+```
+
+```{r}
+
+#EM section for bank data
+
+library(EMCluster)
+
+emobj <- simple.init(bankstripped, nclass = 2)
+
+mod=emcluster(bankstripped,emobj,assign.class =FALSE)
+
+q=assign.class(bankstripped,mod)
+bankclust=q$class
+
+matches=bankclust==bankfull$target
+mean(matches)
+
+bankclust_em=bankclust
+
+```
+```{r}
+#run ICA on heart data
+
+library(fastICA)
+ica=fastICA(b, n.comp=5)
+
+pairs(ica$S, col=rainbow(3)[a[,14]])
+
+#plot(ica$S[,1], ica$S[,1], col=rainbow(3)[a[,14]], xlab="Comp 1", ylab="Comp 1")
+
+reduced=ica$S
+
+dim(reduced)
+
+ica_heart=cbind(reduced[,3],reduced[,4])
+
+
+```
+
+```{r}
+ #run ICA on bank data
+
+
+library(fastICA)
+ica<-fastICA(bankstripped, n.comp=5)
+
+pairs(ica$S, col=rainbow(2)[bankfull[,21]])
+
+#plot(ica$S[,1], ica$S[,1], col=rainbow(3)[a[,14]], xlab="Comp 1", ylab="Comp 1")
+
+reduced=cbind(ica$S[,1],ica$S[,5])
+
+ica_bank=reduced
+
+```
+
+
+
+```{r}
+#Random Projection Heart Data
+library(RandPro)
+
+size <- floor(0.9 * nrow(a))
+trainrows=sample(seq_len(nrow(a)), size = size)
+
+train=a[trainrows,]
+test=a[-trainrows,]
+testlabs=test$target
+trainlabs=train$target
+trainlabs=as.factor(as.numeric(trainlabs)-1)
+testlabs=as.factor(as.numeric(testlabs)-1)
+striptest=subset(test,select=-c(target))
+striptrain=subset(train,select=-c(target))
+
+indx = sapply(a, is.factor)
+a[indx] <- lapply(a[indx], function(x) as.numeric((x)))
+
+mymat=form_matrix(5,ncol(a),eps=0.1,JLT=FALSE)
+newdat=(mymat)%*%t(as.matrix(a))
+#newdat=t(mymat)%*%(as.matrix(a))
+
+newdat=t(newdat)
+
+dim(newdat)
+
+heart_RP=newdat
+
+#pred=classify(striptrain, striptest, trainlabs, testlabs, eps = 0.1,
+#projection = "gaussian", classifier = "knn")
+
+
+
+
+
+
+
+```
+```{r}
+#Random Projection Bank Data
+library(RandPro)
+
+
+
+indx = sapply(bankfull, is.factor)
+bankfull[indx] <- lapply(bankfull[indx], function(x) as.numeric((x)))
+
+mymat=form_matrix(5,ncol(bankfull),eps=0.1,JLT=FALSE)
+newdat=(mymat)%*%t(as.matrix(bankfull))
+#newdat=t(mymat)%*%(as.matrix())
+
+newdat=t(newdat)
+
+dim(newdat)
+
+bank_RP=newdat
+
+
+
+
+```
+```{r}
+#LASSO feature selection heart
+library(glmnet)
+
+mymod=cv.glmnet(as.matrix(b),as.matrix(a$target),family="binomial",alpha=1)
+
+coef(mymod,s=mymod$lambda.1se)
+
+heart_lasso=subset(b,select=-c(ï..age,chol,fbs,restecg))
+
+```
+
+```{r}
+#LASSO feature selection bank
+library(glmnet)
+
+mymod=cv.glmnet(as.matrix(bankstripped),as.matrix(bankfull$target),family="binomial",alpha=1)
+
+coef(mymod,s=mymod$lambda.1se)
+
+bank_lasso=subset(bankstripped,select=-c(age,job,marital,housing,loan,campaign,previous,cons.price.idx,euribor3m))
+
+```
+
+
+```{r}
+#run kmeans clustering with heart RP
+
+inmat=heart_RP
+
+library(factoextra)
+
+mod=kmeans(inmat,2,nstart=4)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==a$target
+
+plot = fviz_cluster(mod, geom = "point", data = inmat) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+heartclust_k_rp=heartlabs
+
+
+
+
+```
+```{r}
+#run kmeans clustering with bank RP
+
+inmat=bank_RP
+
+library(factoextra)
+
+mod=kmeans(inmat,2,nstart=4)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==bankfull$target
+
+krp=heartlabs
+
+plot = fviz_cluster(mod, geom = "point", data = inmat) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+bankclust_k_rp=heartlabs
+
+```
+
+```{r}
+
+#run kmeans clustering with bank PCA
+
+inmat=pca_keep_bank
+
+library(factoextra)
+
+mod=kmeans(inmat,2,nstart=10)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==bankfull$target
+
+plot = fviz_cluster(mod, geom = "point", data = inmat) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+bankclust_k_pca=heartlabs
+
+```
+
+```{r}
+#run kmeans clustering with heart PCA
+
+inmat=pca_keep_heart
+
+library(factoextra)
+
+mod=kmeans(inmat,2,nstart=5)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==a$target
+
+plot = fviz_cluster(mod, geom = "point", data = inmat) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+heartclust_k_pca=heartlabs
+```
+
+```{r}
+#run kmeans clustering with ICA heart data
+inmat=ica_heart
+
+library(factoextra)
+
+mod=kmeans(inmat,2,nstart=5)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==a$target
+
+plot = fviz_cluster(mod, geom = "point", data = as.data.frame(inmat)) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+heartclust_k_ica=heartlabs
+
+```
+
+```{r}
+
+#run kmeans clustering with ICA bank data
+inmat=ica_bank
+
+library(factoextra)
+
+mod=kmeans(inmat,2,nstart=5)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==bankfull$target
+
+plot = fviz_cluster(mod, geom = "point", data = as.data.frame(inmat)) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+bankclust_k_ica=heartlabs
+
+```
+```{r}
+#run kmeans clustering on LASSO'd data for heart
+
+inmat=heart_lasso
+
+library(factoextra)
+
+mod=kmeans(inmat,2,nstart=5)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==a$target
+
+plot = fviz_cluster(mod, geom = "point", data = inmat) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+heartclust_k_lasso=heartlabs
+
+```
+
+```{r}
+#run kmeans clustering with LASSO bank data
+inmat=bank_lasso
+
+library(factoextra)
+
+mod=kmeans(inmat,2,nstart=5)
+heartlabs=-1*mod$cluster+3
+matches=heartlabs==bankfull$target
+
+plot = fviz_cluster(mod, geom = "point", data = inmat) + ggtitle("k = 2")
+
+plot
+mean(matches)
+
+bankclust_k_lasso=heartlabs
+
+```
+
+```{r}
+#EM section for bank data RP
+
+library(EMCluster)
+
+emobj <- simple.init(bank_RP, nclass = 2)
+
+mod=emcluster(bank_RP,emobj,assign.class =FALSE)
+
+q=assign.class(bank_RP,mod)
+bankclust=q$class
+
+matches=bankclust==bankfull$target
+mean(matches)
+
+bankclust_em_rp=bankclust
+```
+```{r}
+#EM section for bank data PCA
+
+library(EMCluster)
+
+emobj <- simple.init(pca_keep_bank, nclass = 2)
+
+mod=emcluster(pca_keep_bank,emobj,assign.class =FALSE)
+
+q=assign.class(pca_keep_bank,mod)
+bankclust=q$class
+
+matches=bankclust==bankfull$target
+mean(matches)
+
+bankclust_em_pca=bankclust
+```
+
+
+```{r}
+#EM section for heart data RP
+
+library(EMCluster)
+
+emobj <- simple.init(heart_RP, nclass = 2)
+
+mod=emcluster(heart_RP,emobj,assign.class =FALSE)
+
+q=assign.class(heart_RP,mod)
+heartclust=q$class
+
+matches=heartclust==a$target
+mean(matches)
+
+heartclust_em_rp=heartclust
+```
+
+
+
+```{r}
+#EM section for heart data ICA
+
+library(EMCluster)
+
+emobj <- simple.init(ica_heart, nclass = 2)
+
+mod=emcluster(ica_heart,emobj,assign.class =FALSE)
+
+q=assign.class(ica_heart,mod)
+heartclust=q$class
+
+matches=heartclust==a$target
+mean(matches)
+
+heartclust_em_ica=heartclust
+```
+
+```{r}
+#EM section for heart data PCA
+
+library(EMCluster)
+
+emobj <- simple.init(pca_keep_heart, nclass = 2)
+
+mod=emcluster(pca_keep_heart,emobj,assign.class =FALSE)
+
+q=assign.class(pca_keep_heart,mod)
+heartclust=q$class
+
+matches=heartclust==a$target
+mean(matches)
+
+heartclust_em_pca=heartclust
+```
+```{r}
+#EM section for heart data LASSO
+
+library(EMCluster)
+
+emobj <- simple.init(heart_lasso, nclass = 2)
+
+mod=emcluster(heart_lasso,emobj,assign.class =FALSE)
+
+q=assign.class(heart_lasso,mod)
+heartclust=q$class
+
+matches=heartclust==a$target
+mean(matches)
+
+heartclust_em_lasso=heartclust
+```
+
+
+```{r}
+#EM section for bank data LASSO
+
+library(EMCluster)
+
+emobj <- simple.init(bank_lasso, nclass = 2)
+
+mod=emcluster(bank_lasso,emobj,assign.class =FALSE)
+
+q=assign.class(bank_lasso,mod)
+bankclust=q$class
+
+matches=bankclust==bankfull$target
+mean(matches)
+
+bankclust_em_lasso=bankclust
+```
+```{r}
+#EM section for bank data
+
+library(EMCluster)
+
+emobj <- simple.init(bankstripped, nclass = 2)
+
+mod=emcluster(bankstripped,emobj,assign.class =FALSE)
+
+q=assign.class(bankstripped,mod)
+bankclust=q$class
+
+matches=bankclust==bankfull$target
+mean(matches)
+
+bankclust_em=bankclust
+```
+
+
+```{r}
+#feed bank data to neural net from PCA
+library(nnet)
+
+trimset=pca_keep_bank
+
+trdata=as.data.frame(pca_keep_bank)
+trdata$target=bankfull$target
+
+#generate model
+mod <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=trdata,type="class")
+
+
+preds=predict(mod,trimset,type="class")
+match=preds==bankfull$target
+mean(match)
+
+
+
+```
+
+```{r}
+#feed bank data into neural net with ICA data
+library(nnet)
+
+trimset=ica_bank
+
+trdata=as.data.frame(ica_bank)
+trdata$target=as.factor(bankfull$target)
+
+#generate model
+mod <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=trdata,type="class")
+
+
+preds=predict(mod,trimset,type="class")
+match=preds==bankfull$target
+mean(match)
+
+
+
+```
+
+
+```{r}
+#feed bank data into neural net with RP data
+library(nnet)
+
+trimset=bank_RP
+
+trdata=as.data.frame(bank_RP)
+trdata$target=as.factor(bankfull$target)
+
+#generate model
+mod <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=trdata,type="class")
+
+
+preds=predict(mod,trimset,type="class")
+match=preds==bankfull$target
+mean(match)
+```
+```{r}
+#feed bank data into neural net with lasso data
+library(nnet)
+
+trimset=bank_lasso
+
+trdata=as.data.frame(bank_lasso)
+trdata$target=as.factor(bankfull$target)
+
+#generate model
+mod <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=trdata,type="class")
+
+
+preds=predict(mod,trimset,type="class")
+match=preds==bankfull$target
+mean(match)
+```
+```{r}
+#RP with kmeans and EM attached
+library(nnet)
+
+trimsetk=as.data.frame(bank_RP)
+trimsete=as.data.frame(bank_RP)
+
+trimsetk$klab=bankclust_k_rp
+trimsete$elab=bankclust_em_rp
+
+kdata=as.data.frame(bank_RP)
+kdata$target=as.factor(bankfull$target)
+kdata$klab=bankclust_k_rp
+
+edata=as.data.frame(bank_RP)
+edata$target=as.factor(bankfull$target)
+edata$elab=bankclust_em_rp
+
+#generate model
+modk <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=kdata,type="class")
+
+mode <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=edata,type="class")
+
+predsk=predict(modk,trimsetk,type="class")
+matchk=predsk==bankfull$target
+mean(matchk)
+
+predse=predict(mode,trimsete,type="class")
+matche=predse==bankfull$target
+mean(matche)
+
+```
+
+```{r}
+#PCA with kmeans and EM attached
+library(nnet)
+
+trimsetk=as.data.frame(pca_keep_bank)
+trimsete=as.data.frame(pca_keep_bank)
+
+trimsetk$klab=bankclust_k_pca
+trimsete$elab=bankclust_em_pca
+
+kdata=as.data.frame(pca_keep_bank)
+kdata$target=as.factor(bankfull$target)
+kdata$klab=bankclust_k_pca
+
+edata=as.data.frame(pca_keep_bank)
+edata$target=as.factor(bankfull$target)
+edata$elab=bankclust_em_pca
+
+#generate model
+modk <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=kdata,type="class")
+
+mode <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=edata,type="class")
+
+predsk=predict(modk,trimsetk,type="class")
+matchk=predsk==bankfull$target
+mean(matchk)
+
+predse=predict(mode,trimsete,type="class")
+matche=predse==bankfull$target
+mean(matche)
+```
+```{r}
+#ICA with kmeans and EM attached
+library(nnet)
+
+trimsetk=as.data.frame(ica_bank)
+trimsete=as.data.frame(ica_bank)
+
+trimsetk$klab=bankclust_k_ica
+trimsete$elab=bankclust_em_ica
+
+kdata=as.data.frame(ica_bank)
+kdata$target=as.factor(bankfull$target)
+kdata$klab=bankclust_k_ica
+
+edata=as.data.frame(ica_bank)
+edata$target=as.factor(bankfull$target)
+edata$elab=bankclust_em_ica
+
+#generate model
+modk <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=kdata,type="class")
+
+mode <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=edata,type="class")
+
+predsk=predict(modk,trimsetk,type="class")
+matchk=predsk==bankfull$target
+mean(matchk)
+
+predse=predict(mode,trimsete,type="class")
+matche=predse==bankfull$target
+mean(matche)
+```
+```{r}
+#LASSO with kmeans and EM attached
+library(nnet)
+
+trimsetk=as.data.frame(bank_lasso)
+trimsete=as.data.frame(bank_lasso)
+
+trimsetk$klab=bankclust_k_lasso
+trimsete$elab=bankclust_em_lasso
+
+kdata=as.data.frame(bank_lasso)
+kdata$target=as.factor(bankfull$target)
+kdata$klab=bankclust_k_lasso
+
+edata=as.data.frame(bank_lasso)
+edata$target=as.factor(bankfull$target)
+edata$elab=bankclust_em_lasso
+
+#generate model
+modk <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=kdata,type="class")
+
+mode <- nnet(target ~ .,
+              size=18,rang=1,decay=0.00001,maxit=100, data=edata,type="class")
+
+predsk=predict(modk,trimsetk,type="class")
+matchk=predsk==bankfull$target
+mean(matchk)
+
+predse=predict(mode,trimsete,type="class")
+matche=predse==bankfull$target
+mean(matche)
+```
+
